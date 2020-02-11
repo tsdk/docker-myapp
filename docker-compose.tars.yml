@@ -1,0 +1,101 @@
+
+version: '3'
+
+services:
+    mysql:
+        image: mysql:5.6
+        #ports:
+        #    - "3306:3306"
+        restart: always
+        environment:
+            - MYSQL_ROOT_PASSWORD=password
+        volumes:
+            - ./mysql:/var/lib/mysql
+            - ./mysql/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+            - ./mysql/query.log:/var/log/mysql/query.log
+            - ./mysql/slow.log:/var/log/mysql/slow.log
+        command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb_use_native_aio=1
+        networks:
+            - vpcbr
+    tars:
+        image: tarscloud/tars
+        ports:
+            - "7003:3000"
+        restart: always
+        environment:
+            - TZ=Asia/Shanghai
+            - DBIP=mysql
+            - DBPort=3306
+            - DBUser=root
+            - DBPassword=password
+            - DBTarsPass=tarspass
+            - MOUNT_DATA=true
+        volumes:
+            - ./tars:/data
+        depends_on:
+            - mysql
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.1.1
+    tarsnode:
+        image: tarscloud/tars-node:dev
+        ports:
+            - "7002:3000"
+        restart: always
+        environment:
+            - TZ=Asia/Shanghai
+            - DBIP=mysql
+            - DBPort=3306
+            - MOUNT_DATA=true
+            - MASTER=tars
+        volumes:
+            - ./tarsnode:/data
+        depends_on:
+            - tars
+            - tarsnode_101
+            - tarsnode_102
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.1.100 #10.5.1.0/24给tars集群
+    tarsnode_101:
+        image: tarscloud/tars-node:dev
+        ports:
+            - "7002:3000"
+        restart: always
+        environment:
+            - TZ=Asia/Shanghai
+            - DBIP=mysql
+            - DBPort=3306
+            - MOUNT_DATA=true
+            - MASTER=tars
+        volumes:
+            - ./tarsnode:/data
+        depends_on:
+            - tars
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.1.101 #10.5.1.0/24给tars集群
+    tarsnode_102:
+        image: tarscloud/tars-node:dev
+        ports:
+            - "7002:3000"
+        restart: always
+        environment:
+            - TZ=Asia/Shanghai
+            - DBIP=mysql
+            - DBPort=3306
+            - MOUNT_DATA=true
+            - MASTER=tars
+        volumes:
+            - ./tarsnode:/data
+        depends_on:
+            - tars
+        networks:
+            vpcbr:
+                ipv4_address: 10.5.1.102 #10.5.1.0/24给tars集群
+networks:
+    vpcbr:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 10.5.0.0/16

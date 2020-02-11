@@ -1,0 +1,439 @@
+version: '3'
+
+services:
+  dnsmasq:
+    image: andyshinn/dnsmasq
+    #ports:
+    #  - "53:53/tcp"
+    #  - "53:53/udp"
+    cap_add:
+      - NET_ADMIN
+    restart: always
+    volumes:
+      - ./dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf
+      - ./dnsmasq/dnsmasq.d:/etc/dnsmasq.d
+    #network_mode: "host"
+    networks:
+      vpcbr:
+        ipv4_address: 10.5.0.255
+    dns:
+      - 127.0.0.1
+  jenkins:
+    image: jenkins/jenkins:lts
+    domainname: jenkins.vm
+    #ports:
+    #    - "7004:8080"
+    #    - "50000:50000"
+    restart: always
+    volumes:
+      - ./jenkins:/var/jenkins_home
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      vpcbr:
+    dns:
+      - 10.5.0.255
+  redis:
+    image: redis:alpine
+    #ports:
+    #    - "6379:6379"
+    restart: always
+    volumes:
+      - ./redis:/data
+    command:
+      - redis-server
+      - /data/redis.conf
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  mysql:
+    image: mysql:5.6
+    #ports:
+    #    - "3306:3306"
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+    volumes:
+      - ./mysql:/var/lib/mysql
+      - ./mysql/mysqld.cnf:/etc/mysql/mysql.conf.d/mysqld.cnf
+      - ./mysql/query.log:/var/log/mysql/query.log
+      - ./mysql/slow.log:/var/log/mysql/slow.log
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --innodb_use_native_aio=1
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  haproxy:
+    image: haproxy:alpine
+    ports:
+      - 7005:80
+      - 3306:3306
+      - 6379:6379
+      - 7004:7004
+      - 7006:7006
+      - 7007:7007
+      - 7008:7008
+      - 5671:5671
+      - 5672:5672
+      - 27017:27017
+      - 5432:5432
+      - 7009:7009
+      - 11211:11211
+    restart: always
+    environment:
+      - CPU_CORES=1
+    volumes:
+      - ./haproxy:/usr/local/etc/haproxy
+    depends_on:
+      - mysql
+      - redis
+      - jenkins
+      - dnsmasq
+      - mongo-express
+      - rabbitmq-management
+      - postgres
+      - adminer
+      - memcached
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  rabbitmq:
+    image: rabbitmq:alpine
+    #ports:
+    #    - 4369:4369
+    #    - 25672:25672
+    #    - 5671:5671
+    #    - 5672:5672
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=root
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - ./rabbitmq:/var/lib/rabbitmq
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  rabbitmq-management:
+    image: rabbitmq:management-alpine
+    #ports:
+    #    - 7006:15671
+    #    - 7007:15672
+    #    - 4369:4369
+    #    - 25672:25672
+    #    - 5671:5671
+    #    - 5672:5672
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=root
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - ./rabbitmq:/var/lib/rabbitmq
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  mongo:
+    image: mongo
+    restart: always
+    #ports:
+    #    - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - ./mongo/db:/data/db
+      - ./mongo/configdb:/data/configdb
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  mongo-express:
+    image: mongo-express
+    restart: always
+    #ports:
+    #    - 7008:8081
+    environment:
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: password
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+    depends_on:
+      - mongo
+    links:
+      - mongo
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  postgres:
+    image: postgres:alpine
+    restart: always
+    #ports:
+    #    - 5432:5432
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  adminer:
+    image: adminer
+    restart: always
+    #ports:
+    #    - 7009:8080
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  memcached:
+    image: memcached:alpine
+    restart: always
+    #ports:
+    #    - 11211:11211
+    command:
+      - memcached
+      - '-m 64m'
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  sonarqube:
+    image: sonarqube:latest
+    restart: always
+    ports:
+      - 7010:9000
+    environment:
+      - sonar.jdbc.url=jdbc:postgresql://postgres:5432/sonarqube #schema要提前手动建
+      - sonar.jdbc.username=root
+      - sonar.jdbc.password=password
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./sonarqube/conf:/opt/sonarqube/conf
+      - ./sonarqube/logs:/opt/sonarqube/logs
+      - ./sonarqube/extensions/plugins/sonar-l10n-zh-plugin-1.16.jar:/opt/sonarqube/extensions/plugins/sonar-l10n-zh-plugin-1.16.jar
+      #- ./sonarqube/extensions:/opt/sonarqube/extensions
+      #- ./sonarqube/data:/opt/sonarqube/data
+    depends_on:
+      - postgres
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  elasticsearch:
+    image: elasticsearch:7.4.2
+    restart: always
+    ports:
+      - 9200:9200
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+      - TZ=Asia/Shanghai
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./elasticsearch/esdata1:/usr/share/elasticsearch/data
+      - ./elasticsearch/config/limits.conf:/etc/security/limits.conf
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    depends_on:
+      - elasticsearch2
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  elasticsearch2:
+    image: elasticsearch:7.4.2
+    restart: always
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+      - 'discovery.zen.ping.unicast.hosts=elasticsearch'
+      - TZ=Asia/Shanghai
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./elasticsearch/esdata2:/usr/share/elasticsearch/data
+      - ./elasticsearch/config/limits.conf:/etc/security/limits.conf
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  logstash:
+    image: logstash:7.4.2
+    restart: always
+    ports:
+      - 5044:5044
+      - 9600:9600
+    environment:
+      - xpack.monitoring.elasticsearch.hosts=http://elasticsearch:9200
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./logstash/config:/usr/share/logstash/config
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    depends_on:
+      - elasticsearch
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  kibana:
+    image: kibana:7.4.2
+    restart: always
+    ports:
+      - 7011:5601
+    environment:
+      SERVER_NAME: kibana.vm
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      TZ: Asia/Shanghai
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
+    depends_on:
+      - elasticsearch
+      - logstash
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  zoo:
+    image: zookeeper
+    restart: always
+    hostname: zoo_1
+    ports:
+      - 2181:2181
+      - 7100:8080
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181 server.2=zoo_2:2888:3888;2181 server.3=zoo_3:2888:3888;2181
+    volumes:
+      - ./zookeeper/zoo_1/data:/data
+      - ./zookeeper/zoo_1/datalog:/datalog
+      - ./zookeeper/zoo_1/logs:/logs
+    depends_on:
+      - zoo_2
+      - zoo_3
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  zoo_2:
+    image: zookeeper
+    restart: always
+    hostname: zoo_2
+    ports:
+      - 2182:2181
+      - 7101:8080
+    environment:
+      ZOO_MY_ID: 2
+      ZOO_SERVERS: server.1=zoo_1:2888:3888;2181 server.2=0.0.0.0:2888:3888;2181 server.3=zoo_3:2888:3888;2181
+    volumes:
+      - ./zookeeper/zoo_2/data:/data
+      - ./zookeeper/zoo_2/datalog:/datalog
+      - ./zookeeper/zoo_2/logs:/logs
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  zoo_3:
+    image: zookeeper
+    restart: always
+    hostname: zoo_3
+    ports:
+      - 2183:2181
+      - 7102:8080
+    environment:
+      ZOO_MY_ID: 3
+      ZOO_SERVERS: server.1=zoo_1:2888:3888;2181 server.2=zoo_2:2888:3888;2181 server.3=0.0.0.0:2888:3888;2181
+    volumes:
+      - ./zookeeper/zoo_3/data:/data
+      - ./zookeeper/zoo_3/datalog:/datalog
+      - ./zookeeper/zoo_3/logs:/logs
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  kafka:
+    image: wurstmeister/kafka
+    restart: always
+    hostname: kafka_1
+    ports:
+      - '9092:9092'
+    environment:
+      HOSTNAME_COMMAND: "ip a|grep 'global eth0'|awk '{print $$2}'|awk -F/ '{print $$1}'"
+      KAFKA_ZOOKEEPER_CONNECT: 'zoo:2181,zoo_2:2181,zoo_3:2181'
+      KAFKA_BROKER_ID: 1
+      KAFKA_CREATE_TOPICS: 'Topic1:3:2,Topic2:3:2'
+    depends_on:
+      - zoo
+      - zoo_2
+      - zoo_3
+      - kafka_2
+      - kafka_3
+    volumes:
+      - ./kafka:/kafka
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  kafka_2:
+    image: wurstmeister/kafka
+    restart: always
+    hostname: kafka_2
+    ports:
+      - '9093:9092'
+    environment:
+      HOSTNAME_COMMAND: "ip a|grep 'global eth0'|awk '{print $$2}'|awk -F/ '{print $$1}'"
+      KAFKA_ZOOKEEPER_CONNECT: 'zoo:2181,zoo_2:2181,zoo_3:2181'
+      KAFKA_BROKER_ID: 2
+    depends_on:
+      - zoo
+      - zoo_2
+      - zoo_3
+    volumes:
+      - ./kafka:/kafka
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+  kafka_3:
+    image: wurstmeister/kafka
+    restart: always
+    hostname: kafka_3
+    ports:
+      - '9094:9092'
+    environment:
+      HOSTNAME_COMMAND: "ip a|grep 'global eth0'|awk '{print $$2}'|awk -F/ '{print $$1}'"
+      KAFKA_ZOOKEEPER_CONNECT: 'zoo:2181,zoo_2:2181,zoo_3:2181'
+      KAFKA_BROKER_ID: 3
+    depends_on:
+      - zoo
+      - zoo_2
+      - zoo_3
+    volumes:
+      - ./kafka:/kafka
+    networks:
+      - vpcbr
+    dns:
+      - 10.5.0.255
+networks:
+  vpcbr:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16

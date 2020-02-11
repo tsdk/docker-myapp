@@ -1,0 +1,12 @@
+cluster.name: "docker-cluster"
+network.host: 0.0.0.0
+
+# custom config
+node.name: "node-1"
+discovery.seed_hosts: ["127.0.0.1", "[::1]"]
+cluster.initial_master_nodes: ["node-1"]
+# 开启跨域访问支持，默认为false
+http.cors.enabled: true
+# 跨域访问允许的域名地址，(允许所有域名)以上使用正则
+http.cors.allow-origin: /.*/
+
