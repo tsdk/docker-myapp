@@ -431,6 +431,23 @@ services:
       - vpcbr
     dns:
       - 10.5.0.255
+  zipkin:
+    image: openzipkin/zipkin
+    domainname: zipkin.vm
+    ports:
+        - "7025:9411"
+    restart: always
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    networks:
+      vpcbr:
+    dns:
+      - 10.5.0.255
 networks:
   vpcbr:
     driver: bridge

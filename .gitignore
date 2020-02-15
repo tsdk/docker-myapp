@@ -125,3 +125,4 @@ vitess/*
 zookeeper/zoo_1/*
 zookeeper/zoo_2/*
 zookeeper/zoo_3/*
+ignore/**
